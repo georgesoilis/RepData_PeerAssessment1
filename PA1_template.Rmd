@@ -1,25 +1,195 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
+title: 'Reproducible Research: Peer Assessment 1'
+output:
+  pdf_document: default
   html_document:
-    keep_md: true
+    keep_md: yes
 ---
-
+```{r}
+library(knitr)
+opts_chunk$set(echo = TRUE)
+```
 
 ## Loading and preprocessing the data
+```{r,message=FALSE}
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+library(Hmisc)
 
+### Read in data 
+activity <- read.csv("activity.csv" )
+# make dates in POSIXtl form in order to use its methods
+#activity$date <-as.POSIXlt(activity$date)
+# return dates to Date class
+activity$date <- as.Date(activity$date)
+# create a new column with day names
+activity$day<-factor(weekdays(activity$date))
+# use the names to create a factor variable 2 levels:weekdays/weekends
+activity$daytype<-factor(activity$day%in% c("Saturday","Sunday"),labels=c('weekday', 'weekend'))
 
-
+#Quick look 
+summary(activity)#NA's   :2304   
+```
 ## What is mean total number of steps taken per day?
+```{r,message=FALSE}
+## with NAs not removed 
+daytotals <- tapply(activity$steps, activity$date, sum)
+#histogram of daily totals
+hist(daytotals, breaks = 61)  # 61 days 
+summary(daytotals) ##median: 10760    mean: 10770
+#Using the mean function needs NAs removed
+mean(daytotals,na.rm=T) #but with the 8 days removed mean: 10766.19
+median(daytotals,na.rm=T) ## median : 10765
 
+# or with dplyr
+# You can use data frame or make a data table
+# activitydf<-tbl_df(activity)
+## daily sum ,NAs included
+dsum <-summarise(group_by(activity,date), s = sum(steps))
+summary(dsum)
+plot(dsum,type="l")##NAs producing gaps in the plot
+hist(dsum$s,breaks=17568/1000,main="Histogram of Daily Sums Frequency")
 
+##daily mean, NAs included
+dmean <-summarise(group_by(activity,date),m=mean(steps))
+summary(dmean)
+plot(dmean,type="l")##NAs producing gaps
+
+## Examining by interval (288 intervals per day)
+###by interval sum,NAs removed 
+isum <-summarise(group_by(activity,interval), s = sum(steps,na.rm=T))
+summary(isum)
+plot(isum,type="l",ylab="Step sum",main="Sum per interval across all days")
+hist(isum$s,breaks=17568/1000,main="Histogram of per Interval Sums Frequency")
+```
 
 ## What is the average daily activity pattern?
+## 1.Make a time series plot of the 5-minute interval(x-axis)
+## and the average number of steps taken,averaged across all days (y-axis)
+```{r,message=FALSE}
+##by interval mean daily steps,NAs removed
+imean<-summarise(group_by(activity,interval),m=mean(steps,na.rm=T))
+summary(imean)
+plot(imean,type="l",xlab="Intervals",ylab="mean steps",main="Weekly mean by interval")
+hist(imean$m,breaks=17568/1000,main="Histogram of per Interval Means Frequency")
+```
 
+## What is the average daily activity pattern?
+```{r,message=FALSE}
+#we can plot a Breakdown of steps by day of the week(by name)
 
+meandaytotal<-aggregate(activity$steps, by=list(interval = activity$interval,day = activity$day), FUN=mean,na.rm=T)
+
+library(ggplot2)
+ggplot(data = meandaytotal, aes(interval, x, group=day)) +
+  geom_line() +
+  facet_grid(day ~. ) +
+  xlab("Time Interval") +
+  ylab("Mean Number of Steps") +
+  ggtitle("Mean Number of Steps versus Time Interval")
+##qplot 
+qplot(meandaytotal$interval,meandaytotal$x,colour=meandaytotal$day)
+```
+
+## 2.Which 5-minute interval, on average across all the days in the dataset,contains the maximum number of steps?
+```{r,message=FALSE}
+## biggest value of mean steps per 5 minute interval 
+which.max((isum$s))#result is interval 104
+##get the value of the 104 interval
+isum[104,]
+#gives the value of  10927(most steps/interval across all days)
+#Or we can examine the averages across all days ,and find that the
+#same interval(104)has the highest average ,with 206.16
+which.max((imean$m))
+imean[which.max(imean$m),]
+```
 
 ## Imputing missing values
+```{r,message=FALSE}
+# NA substituted with mean values
+clean<-activity
+clean$steps  <- with(activity, impute(steps, mean))
+summary(clean)#reports all details
 
+##Repeating the analysis from the start for imputed set
+## with NAs not removed 
+daytotals <- tapply(clean$steps, clean$date, sum)
+#histogram of daily totals
+hist(daytotals, breaks = 61)  # 61 days 
+summary(daytotals) ##median: 10770    mean: 10770
+#Using the mean function needs NAs removed
+mean(daytotals,na.rm=T) #but with the 8 days removed mean: 10766.19
+median(daytotals,na.rm=T) ## median : 10765
 
+# or with dplyr
+# You can use data frame or make a data table
+# activitydf<-tbl_df(activity)
+## daily sum ,NAs included
+dsum <-summarise(group_by(clean,date), s = sum(steps))
+summary(dsum)
+plot(dsum,type="l")##No gaps in the plot
+hist(dsum$s,breaks=17568/1000,main="Histogram of Daily Sums Frequency")
 
-## Are there differences in activity patterns between weekdays and weekends?
+##daily mean, NAs included
+dmean <-summarise(group_by(clean,date),m=mean(steps))
+summary(dmean)
+plot(dmean,type="l")##No gaps
+
+## Examining by interval (288 intervals per day)
+###by interval sum,NAs removed 
+isum <-summarise(group_by(clean,interval), s = sum(steps,na.rm=T))
+summary(isum)
+plot(isum,type="l",ylab="Step sum",main="Sum per interval across all days")
+hist(isum$s,breaks=17568/1000,main="Histogram of per Interval Sums Frequency")
+
+## What is the average daily activity pattern?
+## 1.Make a time series plot of the 5-minute interval(x-axis)
+## and the average number of steps taken,averaged across all days (y-axis)
+
+##by interval mean daily steps,NAs removed
+imean<-summarise(group_by(clean,interval),m=mean(steps,na.rm=T))
+summary(imean)
+plot(imean,type="l",xlab="Intervals",ylab="mean steps",main="Weekly mean by interval")
+hist(imean$m,breaks=17568/1000,main="Histogram of per Interval Means Frequency")
+
+## What is the average daily activity pattern?
+#we can plot a Breakdown of steps by day of the week(by name)
+
+meandaytotal<-aggregate(clean$steps, by=list(interval = clean$interval,day = clean$day), FUN=mean,na.rm=T)
+
+library(ggplot2)
+ggplot(data = meandaytotal, aes(interval, x, group=day)) +
+  geom_line() +
+  facet_grid(day ~. ) +
+  xlab("Time Interval") +
+  ylab("Mean Number of Steps") +
+  ggtitle("Mean Number of Steps versus Time Interval")
+
+##qplot 
+qplot(meandaytotal$interval,meandaytotal$x,colour=meandaytotal$day)
+```
+
+##Are there di???erent activity patterns between weekdays and weekends?
+```{r,message=FALSE}
+
+qplot(clean$interval,clean$steps,colour=clean$daytype)
+
+daytype<-aggregate(clean$steps, by=list(interval = clean$interval,daytype = clean$daytype), FUN=mean,na.rm=T)
+p <- ggplot(daytype,aes(x=interval,y=x))
+p <- p +geom_line( col= "blue")+facet_grid(daytype~.)
+p <- p + labs(title="Average steps per interval by daytype")
+p
+
+## With smoothers,we can see clearly the different activity pattern
+ggplot(daytype, aes(interval, x, group=daytype)) +
+  geom_line() +
+  facet_grid(daytype ~ .) +
+  geom_point(col='blue', pch=19, cex=0.8, alpha=0.9) +
+  geom_rug() +
+  ylab("Mean Number of Steps") +
+  ggtitle("Mean Number of Steps versus Time Interval")+
+  stat_smooth(se=FALSE, method='loess', col='indianred1', lwd=1.2) +
+  theme_bw()
+
+```
